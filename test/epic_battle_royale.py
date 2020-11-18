@@ -3,7 +3,6 @@ import sys
 import os
 from pong_testbench import PongTestbench
 from multiprocessing import Process, Queue
-from matplotlib import font_manager
 from time import sleep
 import importlib
 import traceback
@@ -21,7 +20,8 @@ args = parser.parse_args()
 
 save_file = "ebr_save.p"
 
-def run_test(id1, agent1_dir, id2,  agent2_dir, queue, games, render):
+
+def run_test(id1, agent1_dir, id2, agent2_dir, queue, games, render):
     # Add the first agent to Python import path
     sys.path.insert(0, agent1_dir)
     orig_wd = os.getcwd()
@@ -166,7 +166,7 @@ def epic_battle_royale(top_dir, max_proc=4):
             print("Living procs:", sum(p.is_alive() for p in procs))
             while sum(p.is_alive() for p in procs) >= max_proc:
                 sleep(0.3)
-            print("Starting process (%d / %d)" % (i1*len(directories) + i2, len(directories)**2))
+            print("Starting process (%d / %d)" % (i1 * len(directories) + i2, len(directories) ** 2))
             proc.start()
             sleep(1)
 
@@ -205,7 +205,7 @@ def epic_battle_royale(top_dir, max_proc=4):
     # Fetch all results from the queue
     no_agents = len(directories)
     games_won = np.zeros((no_agents, no_agents), dtype=np.int32)
-    total_games = np.zeros((no_agents, ), dtype=np.int32)
+    total_games = np.zeros((no_agents,), dtype=np.int32)
 
     for id1, id2, wins1, wins2, name1, name2, games in all_results:
         # Sanity check...
@@ -236,15 +236,15 @@ def epic_battle_royale(top_dir, max_proc=4):
     # Save the leaderboard
     resfile = open("leaderboard.txt", "w")
     print("")
-    print("-"*80)
+    print("-" * 80)
     print("--- LEADERBOARD ---")
     for i, (wins, losses, name, dir, games) in enumerate(agent_wins):
-        winrate = wins/(wins+losses)
-        line = f"{i+1}. {name} with {wins} wins in {games} games (winrate {winrate*100:.2f}%) (from {dir})"
-        resfile.write(line+"\n")
+        winrate = wins / (wins + losses)
+        line = f"{i + 1}. {name} with {wins} wins in {games} games (winrate {winrate * 100:.2f}%) (from {dir})"
+        resfile.write(line + "\n")
         print(line)
     resfile.close()
-    print("-"*80)
+    print("-" * 80)
     print("")
 
     print("Finished!")

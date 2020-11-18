@@ -3,7 +3,6 @@ import sys
 import os
 from pong_testbench import PongTestbench
 from multiprocessing import Process
-from matplotlib import font_manager
 from time import sleep
 
 parser = argparse.ArgumentParser()
@@ -17,7 +16,7 @@ args = parser.parse_args()
 
 def save_winrate(dir, wins, games):
     resfile = open(os.path.join(dir, "simpleai_winrate.txt"), "w")
-    resfile.write("Winrate: %f (%d / %d" % (wins/games, wins, games))
+    resfile.write("Winrate: %f (%d / %d" % (wins / games, wins, games))
     resfile.close()
 
 

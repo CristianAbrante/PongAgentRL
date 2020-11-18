@@ -2,7 +2,6 @@ import argparse
 import sys
 import os
 from pong_testbench import PongTestbench
-from matplotlib import font_manager
 import importlib
 
 parser = argparse.ArgumentParser()
@@ -16,6 +15,7 @@ args = parser.parse_args()
 
 sys.path.insert(0, args.dir1)
 import agent
+
 orig_wd = os.getcwd()
 os.chdir(args.dir1)
 agent1 = agent.Agent()
