@@ -3,9 +3,20 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import torch
+from torch import tensor
 from torch.distributions import Normal
+import numpy as np
 
 
+#new imports
+import random
+import gym
+import numpy as np
+from PIL import Image
+import torch
+from torch.nn import functional as F
+from torch import nn
+##
 def discount_rewards(r, gamma):
     discounted_r = torch.zeros_like(r)
     running_add = 0
@@ -16,41 +27,73 @@ def discount_rewards(r, gamma):
 
 
 class Policy(nn.Module):
-    def __init__(self, observation_space_dim, action_space_dim):
-        print(observation_space_dim)
-        print(action_space_dim)
-        super().__init__()
-        self.state_space = observation_space_dim
-        self.action_space = action_space_dim
-        self.hidden = 16
-        # This is where the definition of the network starts.
-        self.conv1 = torch.nn.Conv2d(3, 3, kernel_size=(5, 5))
-        self.linear_out = torch.nn.Linear(self.hidden, action_space_dim)
 
-        # sigma as a learnt parameter of the network
-        self.sigma = torch.nn.Parameter(torch.Tensor([10.0]))
-        self.init_weights()
+    def __init__(self):
+            super(Policy, self).__init__()
 
-    def init_weights(self):
-        for m in self.modules():
-            if type(m) is torch.nn.Linear:
-                torch.nn.init.normal_(m.weight)
-                torch.nn.init.zeros_(m.bias)
+            self.gamma = 0.99
+            self.eps_clip = 0.1
 
-    def forward(self, x):
-        # This is where the input is forwarded to the network
-        x = self.conv1(x)
-        x = F.relu(x)
-        x = self.linear_out(x)
+            self.layers = nn.Sequential(
+                nn.Linear(22500, 512), nn.ReLU(),
+                nn.Linear(512, 2),
+            )
 
-        action_mean = self.fc2_mean(x)
-        sigma = torch.sqrt(self.sigma)
+    def state_to_tensor(self, I):
+        #print(" state to tensor ", I[0])
+        """ prepro 210x160x3 uint8 frame into 6000 (75x80) 1D float vector. See Karpathy's post: http://karpathy.github.io/2016/05/31/rl/ """
+        #print("image is ", type(I[0]))
 
-        # Return a normal distribution.
-        action_dist = Normal(loc=action_mean, scale=sigma)
+        if I is None:
+            return torch.zeros(1, 22500)
+        img = I[0]
+        img = img[35:185]  # crop - remove 35px from start & 25px from end of image in x, to reduce redundant parts of image (i.e. after ball passes paddle)
+        img = img[::2, ::2, ::]  # downsample by factor of 2.
+        img[img == 144] = 0  # erase background (background type 1)
+        img[img == 109] = 0  # erase background (background type 2)
+        img[img != 0] = 1  # everything else (paddles, ball) just set to 1. this makes the image grayscale effectively
+        #print("Shape = ", torch.from_numpy(img.astype(np.float32).ravel()).unsqueeze(0).shape)
+        return torch.from_numpy(img.astype(np.float32).ravel()).unsqueeze(0)
 
-        return action_dist
+    def pre_process(self, x, prev_x):
+        return self.state_to_tensor(x) - self.state_to_tensor(prev_x)
 
+    def convert_action(self, action):
+        return action + 2
+
+    def forward(self, d_obs, action=None, action_prob=None, advantage=None, deterministic=False):
+        if action is None:
+            #print(" None action ")
+            with torch.no_grad():
+                logits = self.layers(d_obs)
+                if deterministic:
+                    action = int(torch.argmax(logits[0]).detach().cpu().numpy())
+                    action_prob = 1.0
+                else:
+                    c = torch.distributions.Categorical(logits=logits)
+                    action = int(c.sample().cpu().numpy()[0])
+                    action_prob = float(c.probs[0, action].detach().cpu().numpy())
+                return action, action_prob
+        '''
+        # policy gradient (REINFORCE)
+        logits = self.layers(d_obs)
+        loss = F.cross_entropy(logits, action, reduction='none') * advantage
+        return loss.mean()
+        '''
+
+        # PPO
+        #print("PPO")
+        vs = np.array([[1., 0.], [0., 1.]])
+        ts = torch.FloatTensor(vs[action.cpu().numpy()])
+
+        logits = self.layers(d_obs)
+        r = torch.sum(F.softmax(logits, dim=1) * ts, dim=1) / action_prob
+        loss1 = r * advantage
+        loss2 = torch.clamp(r, 1-self.eps_clip, 1+self.eps_clip) * advantage
+        loss = -torch.min(loss1, loss2)
+        loss = torch.mean(loss)
+
+        return loss
 
 class Agent(object):
     def __init__(self, policy, player_id=1):
@@ -89,26 +132,36 @@ class Agent(object):
         """
         return self.name
 
-    def get_action(self, observation=None, evaluation=True):
-        print(observation)
+    def get_action(self, observation, evaluation=True):
+        print("Get_action observation ",(observation).shape)
+        #obs = observation[0]
+        #print(type(obs))
+        #obs = obs.reshape(200*200*3)
+        #print("obs.shape ",obs.shape)
         x = torch.from_numpy(observation).float().to(self.train_device)
-
+        print("x.shape ",x.shape)
         # Pass state x through the policy network (T1)
+        #print("x is ",x, type(x))
+        print("-------------------------------------")
+        #y = x.resize_((200*200*3))
+        #print("y is ",y.shape)
+        print("get_action and x = ", x.shape)
         aprob = self.policy.forward(x)
-
+        print(" aprob is", aprob, type(aprob))
         # TODO: Not sure how to follow procedure here because output should
         # be either 0/1 (up or down)
 
         # Return mean if evaluation, else sample from the distribution
         # returned by the policy (T1)
         if evaluation:
-            action = aprob.mean
+            action = aprob.mean()
         else:
             action = aprob.sample()
 
         # DONE: Calculate the log probability of the action (T1)
         act_log_prob = aprob.log_prob(action)
-
+        print("Action ",action)
+        action = 2 if np.random.uniform() < aprob else 3
         return action, act_log_prob
 
     def update_policy(self, episode_number):
