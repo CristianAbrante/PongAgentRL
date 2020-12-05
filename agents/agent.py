@@ -104,17 +104,22 @@ class Agent(object):
         self.rewards = []
 
     # TODO: Implement model loading.
-    def load_model(self):
+    def load_model(self, model_path):
         """
         Function that loads the model file.
         """
+        self.policy.load_state_dict(torch.load(model_path))
         return
 
-    # TODO: Implement reset function.
     def reset(self):
         """
         Method that resets the state of the agent
         """
+        self.observations, self.actions, self.action_probs, self.rewards = [], [], [], []
+
+        for layer in self.policy.children():
+            if hasattr(layer, 'reset_parameters'):
+                layer.reset_parameters()
         return
 
     def get_name(self):
