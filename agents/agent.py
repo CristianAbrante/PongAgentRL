@@ -73,12 +73,12 @@ class Policy(nn.Module):
         In this function the observation is processed in the neural network
         """
         logits = self.conv_layers(observation)
-        #print("In forward 1 ", torch.sum(torch.isnan(logits)).item(), len(logits))
+        # print("In forward 1 ", torch.sum(torch.isnan(logits)).item(), len(logits))
         # Convolutional layer is reshaped to fit linear layers.
         logits = logits.view(observation.shape[0], -1)
-        #print("In forward 2 ", torch.sum(torch.isnan(logits)).item(), len(logits))
+        # print("In forward 2 ", torch.sum(torch.isnan(logits)).item(), len(logits))
         logits = self.linear_layers(logits)
-        #print("In forward 3 ", torch.sum(torch.isnan(logits)).item(), len(logits))
+        # print("In forward 3 ", torch.sum(torch.isnan(logits)).item(), len(logits))
         return logits
 
 
@@ -105,19 +105,22 @@ class Agent(object):
         self.rewards = []
 
     # TODO: Implement model loading.
-    def load_model(self, path):
+    def load_model(self, model_path):
         """
         Function that loads the model file.
         """
-
-        return
+        self.policy.load_state_dict(torch.load(model_path))
 
     # TODO: Implement reset function.
     def reset(self):
         """
         Method that resets the state of the agent
         """
-        return
+        self.observations, self.actions, self.action_probs, self.rewards = [], [], [], []
+
+        for layer in self.policy.children():
+            if hasattr(layer, 'reset_parameters'):
+                layer.reset_parameters()
 
     def get_name(self):
         """
@@ -140,10 +143,10 @@ class Agent(object):
             action = torch.argmax(logits[0])
             action_prob = torch.Tensor(1.0)
         else:
-            #if torch.sum(torch.isnan(logits)).item() > 0:
-                #print("logits is nan ", logits)
+            # if torch.sum(torch.isnan(logits)).item() > 0:
+            # print("logits is nan ", logits)
             distribution = Categorical(logits=logits)
-            #print ("In get_action and dist = ", distribution)
+            # print ("In get_action and dist = ", distribution)
             action = distribution.sample()
             # action_prob = distribution.probs[0, action]
             action_prob = distribution.log_prob(action)
