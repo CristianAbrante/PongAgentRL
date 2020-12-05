@@ -142,8 +142,8 @@ class Agent(object):
                 print(logits)
             distribution = Categorical(logits=logits)
             action = distribution.sample()
-            action_prob = distribution.probs[0, action]
-            # action_prob = distribution.log_prob(action)
+            # action_prob = distribution.probs[0, action]
+            action_prob = distribution.log_prob(action)
 
         return action, action_prob
 
@@ -172,9 +172,9 @@ class Agent(object):
 
         # Update of the network params using loss.
         logits = self.policy.forward(observations)
-        # r = torch.sum(F.softmax(logits, dim=1) * ts, dim=1) / action_probs
+        r = torch.sum(logits * ts, dim=1) / action_probs
         # print(r)
-        loss1 = action_probs * discounted_rewards
+        loss1 = r * discounted_rewards
         loss2 = torch.clamp(action_probs, 1 - self.eps_clip, 1 + self.eps_clip) * discounted_rewards
         loss = -torch.min(loss1, loss2)
         loss = torch.mean(loss)
