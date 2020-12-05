@@ -3,7 +3,6 @@ import wimblepong
 import numpy as np
 from agent import Agent, Policy, subtract_observations
 import matplotlib.pyplot as plt
-import pandas as pd
 import torch
 
 env = gym.make('WimblepongVisualSimpleAI-v0')
@@ -74,7 +73,7 @@ for episode in range(train_episodes):
         print(f"Episode {episode} finished | total reward -> {np.mean(reward_history)} | win rate -> {win_rate}")
         torch.save(agent.policy.state_dict(), f"models/model_{episode}.mdl")
 
-    agent.update_policy(episode)
+    agent.update_policy()
 
 plt.plot(reward_history)
 plt.plot(average_reward_history)

@@ -3,24 +3,25 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 from torch import nn
+from PIL import Image
 
 
 def preprocess_image(observation):
     """
     This function is used is used to done the preprocessing to the image.
     """
-    image = np.array(observation)
+    reduced_obs = observation[::2, ::2]
     background = [33, 1, 36]
-    preprocessed_img = np.zeros((observation.shape[0], observation.shape[1], 1))
+    black_white_obs = np.zeros((reduced_obs.shape[0], reduced_obs.shape[1], 1))
 
-    for i in range(observation.shape[0]):
-        for j in range(observation.shape[1]):
-            comparison = image[i, j] == background
+    for i in range(reduced_obs.shape[0]):
+        for j in range(reduced_obs.shape[1]):
+            comparison = reduced_obs[i, j] != background
             if comparison.all():
-                preprocessed_img[i, j] = 0
-            else:
-                preprocessed_img[i, j] = 1
-    return torch.from_numpy(preprocessed_img.astype(np.float32).ravel()).unsqueeze(0)
+                black_white_obs[i, j] = 1
+
+    black_white_obs = black_white_obs.transpose((2, 0, 1))
+    return torch.from_numpy(black_white_obs.astype(np.float32)).unsqueeze(0)
 
 
 def discount_rewards(r, gamma):
@@ -40,25 +41,43 @@ def subtract_observations(current_obs, prev_obs=None):
 
 
 class Policy(nn.Module):
-    def __init__(self, observation_space, action_space):
+    def __init__(self, input_image_shape, action_space):
         super(Policy, self).__init__()
         self.eps_clip = 0.1
 
-        # TODO: Change structure with CNN.
-        # pixels_size = image_shape[0] * image_shape[1] * image_shape[2]
-        # Neural network is defined as a sequential structure.
-        self.layers = nn.Sequential(
-            nn.Linear(observation_space, 512),
+        # First part of the neural network are the convolutional layers.
+        self.conv_layers = nn.Sequential(
+            nn.Conv2d(1, 6, 3),
             nn.ReLU(),
-            nn.Linear(512, action_space),
+            nn.Conv2d(6, 16, 3),
+            nn.ReLU()
         )
+
+        # Calculation of input size -> w-m+1 (for each convolution)
+        # Second part are the linear layers.
+        self.linear_layers = nn.Sequential(
+            nn.Linear(16 * 96 * 96, 128),
+            nn.ReLU(),
+            nn.Linear(128, action_space)
+        )
+
+    def num_flat_features(self, x):
+        size = x.size()[1:]  # all dimensions except the batch dimension
+        num_features = 1
+        for s in size:
+            num_features *= s
+        return num_features
 
     def forward(self, observation):
         """
         In this function the observation is processed in the neural network
         """
-        # print(observation)
-        logits = self.layers(observation)
+        logits = self.conv_layers(observation)
+
+        # Convolutional layer is reshaped to fit linear layers.
+        logits = logits.view(observation.shape[0], -1)
+
+        logits = self.linear_layers(logits)
         return logits
 
 
@@ -119,15 +138,21 @@ class Agent(object):
             action = torch.argmax(logits[0])
             action_prob = torch.Tensor(1.0)
         else:
+            if torch.sum(torch.isnan(logits)).item() > 0:
+                print(logits)
             distribution = Categorical(logits=logits)
             action = distribution.sample()
-            action_prob = distribution.log_prob(action)
+            action_prob = distribution.probs[0, action]
+            # action_prob = distribution.log_prob(action)
 
         return action, action_prob
 
     # Implement the update of the policy.
-    def update_policy(self, episode_number):
-        observations = torch.stack(self.observations, dim=0).to(self.train_device).squeeze()
+    def update_policy(self):
+        if (self.rewards[-1].item() == 10):
+            print("win!")
+
+        observations = torch.stack(self.observations, dim=0).to(self.train_device).squeeze(1)
         actions = torch.stack(self.actions, dim=0).to(self.train_device).squeeze(-1)
         action_probs = torch.stack(self.action_probs, dim=0).to(self.train_device).squeeze(-1)
         rewards = torch.stack(self.rewards, dim=0).to(self.train_device).squeeze(-1)
@@ -147,10 +172,10 @@ class Agent(object):
 
         # Update of the network params using loss.
         logits = self.policy.forward(observations)
-        r = torch.sum(F.softmax(logits, dim=1) * ts, dim=1) / action_probs
-
-        loss1 = r * discounted_rewards
-        loss2 = torch.clamp(r, 1 - self.eps_clip, 1 + self.eps_clip) * discounted_rewards
+        # r = torch.sum(F.softmax(logits, dim=1) * ts, dim=1) / action_probs
+        # print(r)
+        loss1 = action_probs * discounted_rewards
+        loss2 = torch.clamp(action_probs, 1 - self.eps_clip, 1 + self.eps_clip) * discounted_rewards
         loss = -torch.min(loss1, loss2)
         loss = torch.mean(loss)
         loss.backward()
