@@ -73,11 +73,12 @@ class Policy(nn.Module):
         In this function the observation is processed in the neural network
         """
         logits = self.conv_layers(observation)
-
+        #print("In forward 1 ", torch.sum(torch.isnan(logits)).item(), len(logits))
         # Convolutional layer is reshaped to fit linear layers.
         logits = logits.view(observation.shape[0], -1)
-
+        #print("In forward 2 ", torch.sum(torch.isnan(logits)).item(), len(logits))
         logits = self.linear_layers(logits)
+        #print("In forward 3 ", torch.sum(torch.isnan(logits)).item(), len(logits))
         return logits
 
 
@@ -85,7 +86,7 @@ class Agent(object):
     def __init__(self, policy, env):
         self.env = env
         self.eps_clip = 0.1
-        self.name = "Simplest AI"
+        self.name = "Rafa Nadal"
 
         # TODO: Change possibly to GPU
         self.train_device = "cpu"
@@ -94,7 +95,7 @@ class Agent(object):
         self.policy = policy.to(self.train_device)
 
         # Definition of optimizer and gamma parameter.
-        self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=5E-3)
+        self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=5E-4)
         self.gamma = 0.98
 
         # Save the intermediate and middle action probs and rewards
@@ -104,22 +105,18 @@ class Agent(object):
         self.rewards = []
 
     # TODO: Implement model loading.
-    def load_model(self, model_path):
+    def load_model(self, path):
         """
         Function that loads the model file.
         """
-        self.policy.load_state_dict(torch.load(model_path))
+
         return
 
+    # TODO: Implement reset function.
     def reset(self):
         """
         Method that resets the state of the agent
         """
-        self.observations, self.actions, self.action_probs, self.rewards = [], [], [], []
-
-        for layer in self.policy.children():
-            if hasattr(layer, 'reset_parameters'):
-                layer.reset_parameters()
         return
 
     def get_name(self):
@@ -143,9 +140,10 @@ class Agent(object):
             action = torch.argmax(logits[0])
             action_prob = torch.Tensor(1.0)
         else:
-            if torch.sum(torch.isnan(logits)).item() > 0:
-                print(logits)
+            #if torch.sum(torch.isnan(logits)).item() > 0:
+                #print("logits is nan ", logits)
             distribution = Categorical(logits=logits)
+            #print ("In get_action and dist = ", distribution)
             action = distribution.sample()
             # action_prob = distribution.probs[0, action]
             action_prob = distribution.log_prob(action)
